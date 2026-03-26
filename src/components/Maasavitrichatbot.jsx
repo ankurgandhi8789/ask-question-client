@@ -1,11 +1,10 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import logo from "../assets/logo.jpg";
 
 const API_URL = "https://ask-question-server-rosy.vercel.app/api/chat";
 const HEALTH_URL = "https://ask-question-server-rosy.vercel.app/api/health";
-
-// How many times to retry a failed request (for cold start)
 const MAX_RETRIES = 3;
-const RETRY_DELAY_MS = 8000; // 8 seconds between retries
+const RETRY_DELAY_MS = 8000;
 
 function generateSessionId() {
   return "session_" + Math.random().toString(36).substr(2, 9) + "_" + Date.now();
@@ -25,7 +24,6 @@ const POST_LANG_HI = [
   "मुझे नौकरी चाहिए",
 ];
 
-// Server status: 'checking' | 'online' | 'waking' | 'offline'
 export default function MaaSavitriChatPage() {
   const [messages, setMessages] = useState([
     {
@@ -40,7 +38,7 @@ export default function MaaSavitriChatPage() {
   const [quickReplies, setQuickReplies] = useState(LANG_QUICK_REPLIES);
   const [showQuickReplies, setShowQuickReplies] = useState(true);
   const [language, setLanguage] = useState(null);
-  const [serverStatus, setServerStatus] = useState("checking"); // checking | online | waking | offline
+  const [serverStatus, setServerStatus] = useState("checking");
   const [retryCount, setRetryCount] = useState(0);
   const [retrySeconds, setRetrySeconds] = useState(0);
   const messagesEndRef = useRef(null);
@@ -48,21 +46,14 @@ export default function MaaSavitriChatPage() {
   const retryTimerRef = useRef(null);
   const countdownRef = useRef(null);
 
-  // ── Wake up server on page load ──────────────────────────────
   useEffect(() => {
     let attempts = 0;
     const MAX_WAKE_ATTEMPTS = 10;
-
     const ping = async () => {
       try {
         const res = await fetch(HEALTH_URL, { signal: AbortSignal.timeout(10000) });
-        if (res.ok) {
-          setServerStatus("online");
-          return;
-        }
-      } catch {
-        // still waking
-      }
+        if (res.ok) { setServerStatus("online"); return; }
+      } catch { /* still waking */ }
       attempts++;
       if (attempts < MAX_WAKE_ATTEMPTS) {
         setServerStatus("waking");
@@ -71,7 +62,6 @@ export default function MaaSavitriChatPage() {
         setServerStatus("offline");
       }
     };
-
     ping();
   }, []);
 
@@ -83,7 +73,6 @@ export default function MaaSavitriChatPage() {
     if (serverStatus === "online") inputRef.current?.focus();
   }, [serverStatus]);
 
-  // ── Countdown timer for retry banner ─────────────────────────
   const startCountdown = useCallback((seconds) => {
     setRetrySeconds(seconds);
     clearInterval(countdownRef.current);
@@ -100,19 +89,15 @@ export default function MaaSavitriChatPage() {
     clearInterval(countdownRef.current);
   }, []);
 
-  // ── Core send with auto-retry ─────────────────────────────────
   const sendMessage = async (text, attempt = 0) => {
     const messageText = text || input.trim();
     if (!messageText || isLoading) return;
 
-    // Language detection
     if (!language) {
       if (messageText.includes("English") || messageText.includes("🇬🇧")) {
-        setLanguage("en");
-        setQuickReplies(POST_LANG_EN);
+        setLanguage("en"); setQuickReplies(POST_LANG_EN);
       } else if (messageText.includes("हिंदी") || messageText.includes("🇮🇳")) {
-        setLanguage("hi");
-        setQuickReplies(POST_LANG_HI);
+        setLanguage("hi"); setQuickReplies(POST_LANG_HI);
       }
     }
 
@@ -130,9 +115,8 @@ export default function MaaSavitriChatPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: messageText, sessionId }),
-        signal: AbortSignal.timeout(30000), // 30s timeout
+        signal: AbortSignal.timeout(30000),
       });
-
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       if (!data.reply) throw new Error("No reply");
@@ -142,20 +126,14 @@ export default function MaaSavitriChatPage() {
       setMessages((prev) => [...prev, { role: "assistant", text: data.reply, time: new Date() }]);
       setShowQuickReplies(true);
       setIsLoading(false);
-
-    } catch (err) {
+    } catch {
       if (attempt < MAX_RETRIES) {
-        // Auto retry
         const nextAttempt = attempt + 1;
         setRetryCount(nextAttempt);
         setServerStatus("waking");
         startCountdown(RETRY_DELAY_MS / 1000);
-
-        retryTimerRef.current = setTimeout(() => {
-          sendMessage(messageText, nextAttempt);
-        }, RETRY_DELAY_MS);
+        retryTimerRef.current = setTimeout(() => sendMessage(messageText, nextAttempt), RETRY_DELAY_MS);
       } else {
-        // Final failure
         setIsLoading(false);
         setRetryCount(0);
         setServerStatus("offline");
@@ -165,7 +143,7 @@ export default function MaaSavitriChatPage() {
             role: "assistant",
             text: language === "hi"
               ? "माफ़ करें, सर्वर अभी उपलब्ध नहीं है। कृपया कुछ देर बाद पुनः प्रयास करें।"
-              : "Sorry, the server is taking too long to respond. Please wait a moment and try again — it may be waking up from sleep.",
+              : "Sorry, the server is taking too long to respond. Please wait a moment and try again.",
             time: new Date(),
             isError: true,
           },
@@ -192,64 +170,27 @@ export default function MaaSavitriChatPage() {
   };
 
   const fmt = (d) => d.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
-
   const isInputDisabled = isLoading || serverStatus === "checking" || serverStatus === "waking";
 
-  // ── Status banner content ─────────────────────────────────────
   const StatusBanner = () => {
     if (serverStatus === "online") return null;
-
-    const bannerConfig = {
-      checking: {
-        bg: "#fff8e1", border: "#f39c12", color: "#7d5a00",
-        dot: "#f39c12",
-        text: "Connecting to server...",
-      },
+    const cfg = {
+      checking: { bg: "#fff8e1", border: "#f39c12", color: "#7d5a00", dot: "#f39c12", text: "Connecting to server..." },
       waking: {
-        bg: "#fff3cd", border: "#f0ad4e", color: "#7d5a00",
-        dot: "#f39c12",
+        bg: "#fff3cd", border: "#f0ad4e", color: "#7d5a00", dot: "#f39c12",
         text: retryCount > 0
           ? `Server is waking up — retry ${retryCount}/${MAX_RETRIES} in ${retrySeconds}s...`
           : "Server is waking up from sleep. Please wait (~30 sec)...",
       },
-      offline: {
-        bg: "#fdecea", border: "#e74c3c", color: "#a93226",
-        dot: "#e74c3c",
-        text: "Server offline. Check your Render dashboard or try refreshing.",
-      },
-    };
-
-    const cfg = bannerConfig[serverStatus];
+      offline: { bg: "#fdecea", border: "#e74c3c", color: "#a93226", dot: "#e74c3c", text: "Server offline. Try refreshing." },
+    }[serverStatus];
     if (!cfg) return null;
-
     return (
-      <div style={{
-        background: cfg.bg,
-        border: `1px solid ${cfg.border}`,
-        borderRadius: "8px",
-        padding: "9px 14px",
-        margin: "10px 24px 0",
-        display: "flex",
-        alignItems: "center",
-        gap: "8px",
-        fontSize: "12.5px",
-        color: cfg.color,
-        maxWidth: "780px",
-        alignSelf: "center",
-        width: "calc(100% - 48px)",
-      }}>
-        {/* Pulsing dot */}
-        <span style={{
-          width: "8px", height: "8px", borderRadius: "50%",
-          background: cfg.dot, flexShrink: 0,
-          animation: serverStatus !== "offline" ? "pulse 1.5s infinite" : "none",
-        }} />
+      <div style={{ background: cfg.bg, border: `1px solid ${cfg.border}`, borderRadius: "8px", padding: "8px 12px", margin: "8px 12px 0", display: "flex", alignItems: "center", gap: "8px", fontSize: "12px", color: cfg.color }}>
+        <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: cfg.dot, flexShrink: 0, animation: serverStatus !== "offline" ? "pulse 1.5s infinite" : "none" }} />
         {cfg.text}
         {serverStatus === "offline" && (
-          <button
-            onClick={() => { setServerStatus("checking"); window.location.reload(); }}
-            style={{ marginLeft: "auto", background: "#e74c3c", color: "#fff", border: "none", borderRadius: "5px", padding: "3px 10px", fontSize: "11px", cursor: "pointer" }}
-          >
+          <button onClick={() => window.location.reload()} style={{ marginLeft: "auto", background: "#e74c3c", color: "#fff", border: "none", borderRadius: "5px", padding: "3px 10px", fontSize: "11px", cursor: "pointer" }}>
             Retry
           </button>
         )}
@@ -258,39 +199,198 @@ export default function MaaSavitriChatPage() {
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100vh", width: "100%", fontFamily: "'Segoe UI', Tahoma, sans-serif", background: "#eaf0f6", overflow: "hidden" }}>
+    <div className="chat-root">
       <style>{`
-        *{box-sizing:border-box;margin:0;padding:0}
-        @keyframes bounce{0%,80%,100%{transform:translateY(0)}40%{transform:translateY(-5px)}}
-        @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
-        @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}
-        @keyframes spin{to{transform:rotate(360deg)}}
-        .msg-in{animation:fadeUp 0.2s ease}
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        .chat-root {
+          display: flex;
+          flex-direction: column;
+          height: 100vh;
+          height: 100dvh;
+          width: 100%;
+          font-family: 'Segoe UI', Tahoma, sans-serif;
+          background: #eaf0f6;
+          overflow: hidden;
+        }
+
+        /* ── Header ── */
+        .chat-header {
+          background: #1a5276;
+          padding: 0 16px;
+          height: 60px;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          flex-shrink: 0;
+          box-shadow: 0 2px 10px rgba(0,0,0,0.18);
+        }
+        .chat-header-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
+        .chat-logo {
+          width: 42px; height: 42px; border-radius: 50%;
+          object-fit: cover; flex-shrink: 0;
+          border: 2px solid #f39c12;
+        }
+        .chat-title { color: #fff; font-weight: 600; font-size: 14px; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .chat-subtitle { color: #a9cce3; font-size: 11px; display: flex; align-items: center; gap: 5px; }
+        .status-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+
+        .ncbtn {
+          background: rgba(255,255,255,0.1);
+          border: 1px solid rgba(255,255,255,0.25);
+          color: #fff; border-radius: 8px;
+          padding: 6px 12px; font-size: 12px;
+          cursor: pointer; display: flex; align-items: center; gap: 5px;
+          white-space: nowrap; flex-shrink: 0;
+          transition: background 0.15s;
+        }
+        .ncbtn:hover { background: rgba(255,255,255,0.2); }
+
+        /* ── Body ── */
+        .chat-body { display: flex; flex: 1; overflow: hidden; }
+
+        /* ── Sidebar ── */
+        .sidebar {
+          width: 240px; background: #fff;
+          border-right: 1px solid #dde3ea;
+          display: flex; flex-direction: column;
+          flex-shrink: 0; padding: 16px 12px;
+          gap: 8px; overflow-y: auto;
+        }
+        .sidebar-label { font-size: 10px; font-weight: 700; color: #95a5a6; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 2px; }
+        .svc-btn {
+          background: none; border: 1px solid #eaecee;
+          border-radius: 10px; padding: 9px 10px;
+          cursor: pointer; text-align: left;
+          display: flex; align-items: flex-start; gap: 9px;
+          width: 100%; transition: background 0.15s;
+        }
+        .svc-btn:hover:not(:disabled) { background: #e8f4fc; }
+        .svc-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .svc-icon { font-size: 18px; line-height: 1.1; flex-shrink: 0; }
+        .svc-name { font-size: 12px; font-weight: 600; color: #1a5276; }
+        .svc-desc { font-size: 11px; color: #95a5a6; margin-top: 2px; }
+        .sidebar-contact { margin-top: auto; background: #f0f7fc; border-radius: 10px; padding: 11px; border: 1px solid #d4e6f1; }
+        .sidebar-contact-title { font-size: 11px; font-weight: 700; color: #1a5276; margin-bottom: 5px; }
+        .sidebar-contact-text { font-size: 11px; color: #5d6d7e; line-height: 1.8; }
+
+        /* ── Chat Panel ── */
+        .chat-panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; background: #f4f8fb; min-width: 0; }
+
+        /* ── Messages ── */
+        .messages-area { flex: 1; overflow-y: auto; padding: 14px 14px 6px; display: flex; flex-direction: column; gap: 12px; }
+        .messages-inner { max-width: 720px; width: 100%; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
+
+        .msg-wrap { display: flex; flex-direction: column; gap: 3px; }
+        .msg-wrap.user { align-items: flex-end; }
+        .msg-wrap.assistant { align-items: flex-start; }
+
+        .msg-row { display: flex; align-items: flex-end; gap: 7px; }
+        .msg-row.user { flex-direction: row-reverse; }
+
+        .msg-avatar {
+          width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0;
+          display: flex; align-items: center; justify-content: center;
+          font-size: 10px; font-weight: 700; color: #fff;
+        }
+        .msg-avatar.user { background: #2980b9; }
+        .msg-avatar.assistant { background: #f39c12; }
+        .msg-avatar img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
+
+        .msg-bubble {
+          max-width: 72%; padding: 10px 13px;
+          font-size: 13.5px; line-height: 1.65;
+          box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+          white-space: pre-wrap; word-break: break-word;
+        }
+        .msg-bubble.user { background: #1a5276; color: #fff; border-radius: 18px 18px 4px 18px; }
+        .msg-bubble.assistant { background: #fff; color: #2c3e50; border: 1px solid #dde3ea; border-radius: 18px 18px 18px 4px; }
+        .msg-bubble.error { background: #fdecea; color: #c0392b; border: none; }
+
+        .msg-time { font-size: 10px; color: #aab4be; }
+        .msg-time.user { padding-right: 37px; }
+        .msg-time.assistant { padding-left: 37px; }
+
+        /* Typing indicator */
+        .typing-bubble { padding: 12px 14px; background: #fff; border-radius: 18px 18px 18px 4px; border: 1px solid #dde3ea; display: flex; flex-direction: column; gap: 5px; box-shadow: 0 1px 4px rgba(0,0,0,0.07); min-width: 100px; }
+        .typing-dots { display: flex; gap: 5px; align-items: center; }
+        .retry-text { font-size: 11px; color: #e67e22; }
+
+        /* ── Quick Replies ── */
+        .quick-replies { padding: 6px 14px; display: flex; flex-wrap: wrap; gap: 7px; background: #f4f8fb; }
+        .quick-inner { max-width: 720px; width: 100%; margin: 0 auto; display: flex; flex-wrap: wrap; gap: 7px; }
+        .qbtn {
+          background: #eaf4fc; border: 1px solid #aed6f1;
+          color: #1a5276; border-radius: 20px;
+          padding: 6px 13px; font-size: 12.5px;
+          cursor: pointer; font-weight: 500; transition: all 0.15s;
+        }
+        .qbtn:hover:not(:disabled) { background: #d0e8f5; border-color: #5dade2; }
+        .qbtn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* ── Input Bar ── */
+        .input-bar { padding: 10px 14px 12px; background: #fff; border-top: 1px solid #dde3ea; flex-shrink: 0; }
+        .input-inner { max-width: 720px; margin: 0 auto; display: flex; gap: 9px; align-items: center; }
+        .ifield {
+          flex: 1; border: 1.5px solid #d5dbdb; border-radius: 25px;
+          padding: 10px 16px; font-size: 14px; color: #2c3e50;
+          background: #f7f9fb; transition: border-color 0.2s, background 0.2s;
+          min-width: 0;
+        }
+        .ifield:focus { border-color: #1a5276; background: #fff; outline: none; }
+        .ifield:disabled { background: #f0f0f0; cursor: not-allowed; }
+
+        .sbtn {
+          width: 44px; height: 44px; border-radius: 50%;
+          border: none; display: flex; align-items: center;
+          justify-content: center; flex-shrink: 0; transition: background 0.2s;
+        }
+        .sbtn:not(:disabled) { background: #1a5276; cursor: pointer; }
+        .sbtn:not(:disabled):hover { background: #154360; }
+        .sbtn:disabled { background: #bdc3c7; cursor: not-allowed; }
+
+        /* ── Footer ── */
+        .chat-footer { text-align: center; padding: 5px 0 7px; font-size: 10.5px; color: #aab4be; background: #fff; border-top: 1px solid #f0f0f0; flex-shrink: 0; }
+
+        /* ── Animations ── */
+        @keyframes bounce { 0%,80%,100%{transform:translateY(0)} 40%{transform:translateY(-5px)} }
+        @keyframes fadeUp { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+        .msg-in { animation: fadeUp 0.2s ease; }
         .d1{animation:bounce 1.2s infinite 0s}
         .d2{animation:bounce 1.2s infinite 0.2s}
         .d3{animation:bounce 1.2s infinite 0.4s}
-        .qbtn:hover{background:#d0e8f5!important;border-color:#5dade2!important}
-        .sbtn:hover:not(:disabled){background:#154360!important}
-        .ncbtn:hover{background:rgba(255,255,255,0.2)!important}
-        .ifield:focus{border-color:#1a5276!important;background:#fff!important;outline:none}
-        .svc-btn:hover{background:#e8f4fc!important}
-        ::-webkit-scrollbar{width:5px}
-        ::-webkit-scrollbar-thumb{background:#ccd6dd;border-radius:10px}
-        @media(max-width:640px){.sidebar{display:none!important}}
+
+        /* ── Scrollbar ── */
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-thumb { background: #ccd6dd; border-radius: 10px; }
+
+        /* ── Mobile ── */
+        @media (max-width: 640px) {
+          .sidebar { display: none !important; }
+          .chat-title { font-size: 13px; }
+          .messages-area { padding: 10px 10px 4px; }
+          .msg-bubble { max-width: 82%; font-size: 13px; }
+          .quick-replies { padding: 5px 10px; }
+          .input-bar { padding: 8px 10px 10px; }
+          .ncbtn span { display: none; }
+        }
       `}</style>
 
-      {/* ── Header ── */}
-      <div style={{ background: "#1a5276", padding: "0 20px", height: "62px", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, boxShadow: "0 2px 10px rgba(0,0,0,0.18)" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          <div style={{ width: "40px", height: "40px", borderRadius: "50%", background: "#f39c12", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "700", fontSize: "13px", color: "#fff", flexShrink: 0 }}>MS</div>
-          <div>
-            <div style={{ color: "#fff", fontWeight: "600", fontSize: "15px", lineHeight: 1.3 }}>Maa Savitri Consultancy Services</div>
-            <div style={{ color: "#a9cce3", fontSize: "11px", display: "flex", alignItems: "center", gap: "5px" }}>
-              <span style={{
-                width: "6px", height: "6px", borderRadius: "50%", display: "inline-block",
-                background: serverStatus === "online" ? "#2ecc71" : serverStatus === "offline" ? "#e74c3c" : "#f39c12",
-                animation: serverStatus === "waking" || serverStatus === "checking" ? "pulse 1.5s infinite" : "none",
-              }} />
+      {/* Header */}
+      <div className="chat-header">
+        <div className="chat-header-left">
+          <img src={logo} alt="Maa Savitri Logo" className="chat-logo" />
+          <div style={{ minWidth: 0 }}>
+            <div className="chat-title">Maa Savitri Consultancy Services</div>
+            <div className="chat-subtitle">
+              <span
+                className="status-dot"
+                style={{
+                  background: serverStatus === "online" ? "#2ecc71" : serverStatus === "offline" ? "#e74c3c" : "#f39c12",
+                  animation: serverStatus === "waking" || serverStatus === "checking" ? "pulse 1.5s infinite" : "none",
+                }}
+              />
               {serverStatus === "online" ? "AI Assistant · Siwan, Bihar"
                 : serverStatus === "waking" ? "Server waking up..."
                 : serverStatus === "checking" ? "Connecting..."
@@ -298,80 +398,82 @@ export default function MaaSavitriChatPage() {
             </div>
           </div>
         </div>
-        <button className="ncbtn" onClick={handleNewChat} style={{ background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.25)", color: "#fff", borderRadius: "8px", padding: "7px 14px", fontSize: "12px", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          New Chat
+        <button className="ncbtn" onClick={handleNewChat}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round">
+            <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+          <span>New Chat</span>
         </button>
       </div>
 
-      {/* ── Body ── */}
-      <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
+      {/* Body */}
+      <div className="chat-body">
 
         {/* Sidebar */}
-        <div className="sidebar" style={{ width: "255px", background: "#fff", borderRight: "1px solid #dde3ea", display: "flex", flexDirection: "column", flexShrink: 0, padding: "18px 14px", gap: "10px", overflowY: "auto" }}>
-          <div style={{ fontSize: "10.5px", fontWeight: "700", color: "#95a5a6", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "4px" }}>Our Services</div>
+        <div className="sidebar">
+          <div className="sidebar-label">Our Services</div>
           {[
-            { icon: "👨‍🏫", label: "Teacher Recruitment", desc: "Qualified educators for schools" },
+            { icon: "👨🏫", label: "Teacher Recruitment", desc: "Qualified educators for schools" },
             { icon: "🏫", label: "School Staffing", desc: "Non-teaching staff placement" },
             { icon: "📢", label: "Admission Campaigns", desc: "Boost student enrollment" },
             { icon: "🌐", label: "Website Designing", desc: "Professional school websites" },
             { icon: "📣", label: "Advertising & Promotion", desc: "Brand your institution" },
           ].map((s) => (
-            <button key={s.label} className="svc-btn" onClick={() => sendMessage(s.label)} disabled={isInputDisabled} style={{ background: "none", border: "1px solid #eaecee", borderRadius: "10px", padding: "10px 11px", cursor: isInputDisabled ? "not-allowed" : "pointer", textAlign: "left", display: "flex", alignItems: "flex-start", gap: "10px", width: "100%", transition: "background 0.15s", opacity: isInputDisabled ? 0.5 : 1 }}>
-              <span style={{ fontSize: "20px", lineHeight: 1.1, flexShrink: 0 }}>{s.icon}</span>
+            <button key={s.label} className="svc-btn" onClick={() => sendMessage(s.label)} disabled={isInputDisabled}>
+              <span className="svc-icon">{s.icon}</span>
               <div>
-                <div style={{ fontSize: "13px", fontWeight: "600", color: "#1a5276" }}>{s.label}</div>
-                <div style={{ fontSize: "11px", color: "#95a5a6", marginTop: "2px" }}>{s.desc}</div>
+                <div className="svc-name">{s.label}</div>
+                <div className="svc-desc">{s.desc}</div>
               </div>
             </button>
           ))}
-          <div style={{ marginTop: "auto", background: "#f0f7fc", borderRadius: "10px", padding: "12px", border: "1px solid #d4e6f1" }}>
-            <div style={{ fontSize: "11px", fontWeight: "700", color: "#1a5276", marginBottom: "6px" }}>📍 Contact Us</div>
-            <div style={{ fontSize: "12px", color: "#5d6d7e", lineHeight: "1.8" }}>
-              Siwan, Bihar<br />Serving Bihar &amp; Eastern UP
-            </div>
+          <div className="sidebar-contact">
+            <div className="sidebar-contact-title">📍 Contact Us</div>
+            <div className="sidebar-contact-text">Siwan, Bihar<br />Serving Bihar &amp; Eastern UP</div>
           </div>
         </div>
 
         {/* Chat Panel */}
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", background: "#f4f8fb" }}>
-
-          {/* Status Banner */}
+        <div className="chat-panel">
           <StatusBanner />
 
           {/* Messages */}
-          <div style={{ flex: 1, overflowY: "auto", padding: "16px 24px 8px", display: "flex", flexDirection: "column", gap: "14px" }}>
-            <div style={{ maxWidth: "780px", width: "100%", margin: "0 auto", display: "flex", flexDirection: "column", gap: "14px" }}>
+          <div className="messages-area">
+            <div className="messages-inner">
               {messages.map((msg, i) => (
-                <div key={i} className="msg-in" style={{ display: "flex", flexDirection: "column", alignItems: msg.role === "user" ? "flex-end" : "flex-start", gap: "3px" }}>
-                  <div style={{ display: "flex", alignItems: "flex-end", gap: "8px", flexDirection: msg.role === "user" ? "row-reverse" : "row" }}>
-                    <div style={{ width: "32px", height: "32px", borderRadius: "50%", flexShrink: 0, background: msg.role === "user" ? "#2980b9" : "#f39c12", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "11px", fontWeight: "700", color: "#fff" }}>
-                      {msg.role === "user" ? "U" : "MS"}
+                <div key={i} className={`msg-in msg-wrap ${msg.role}`}>
+                  <div className={`msg-row ${msg.role}`}>
+                    <div className={`msg-avatar ${msg.role}`}>
+                      {msg.role === "assistant"
+                        ? <img src={logo} alt="MS" />
+                        : "U"}
                     </div>
-                    <div style={{ maxWidth: "68%", padding: "11px 15px", borderRadius: msg.role === "user" ? "18px 18px 4px 18px" : "18px 18px 18px 4px", background: msg.role === "user" ? "#1a5276" : msg.isError ? "#fdecea" : "#ffffff", color: msg.role === "user" ? "#fff" : msg.isError ? "#c0392b" : "#2c3e50", fontSize: "14px", lineHeight: "1.65", border: msg.role === "assistant" && !msg.isError ? "1px solid #dde3ea" : "none", boxShadow: "0 1px 4px rgba(0,0,0,0.07)", whiteSpace: "pre-wrap" }}>
+                    <div className={`msg-bubble ${msg.role}${msg.isError ? " error" : ""}`}>
                       {msg.text}
                     </div>
                   </div>
-                  <div style={{ fontSize: "10px", color: "#aab4be", paddingLeft: msg.role === "user" ? 0 : "40px", paddingRight: msg.role === "user" ? "40px" : 0 }}>
-                    {fmt(msg.time)}
-                  </div>
+                  <div className={`msg-time ${msg.role}`}>{fmt(msg.time)}</div>
                 </div>
               ))}
 
-              {/* Typing / Retrying indicator */}
               {isLoading && (
-                <div className="msg-in" style={{ display: "flex", alignItems: "flex-end", gap: "8px" }}>
-                  <div style={{ width: "32px", height: "32px", borderRadius: "50%", background: "#f39c12", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "11px", fontWeight: "700", color: "#fff", flexShrink: 0 }}>MS</div>
-                  <div style={{ padding: "11px 15px", background: "#fff", borderRadius: "18px 18px 18px 4px", border: "1px solid #dde3ea", display: "flex", flexDirection: "column", gap: "6px", boxShadow: "0 1px 4px rgba(0,0,0,0.07)", minWidth: "120px" }}>
-                    <div style={{ display: "flex", gap: "5px", alignItems: "center" }}>
-                      {["d1","d2","d3"].map(c => <div key={c} className={c} style={{ width: "7px", height: "7px", borderRadius: "50%", background: "#95a5a6" }} />)}
+                <div className="msg-in msg-wrap assistant">
+                  <div className="msg-row assistant">
+                    <div className="msg-avatar assistant">
+                      <img src={logo} alt="MS" />
                     </div>
-                    {retryCount > 0 && (
-                      <div style={{ fontSize: "11px", color: "#e67e22" }}>
-                        ⏳ Waking server... retry {retryCount}/{MAX_RETRIES}
-                        {retrySeconds > 0 && ` (${retrySeconds}s)`}
+                    <div className="typing-bubble">
+                      <div className="typing-dots">
+                        {["d1", "d2", "d3"].map((c) => (
+                          <div key={c} className={c} style={{ width: "7px", height: "7px", borderRadius: "50%", background: "#95a5a6" }} />
+                        ))}
                       </div>
-                    )}
+                      {retryCount > 0 && (
+                        <div className="retry-text">
+                          ⏳ Waking server... retry {retryCount}/{MAX_RETRIES}{retrySeconds > 0 && ` (${retrySeconds}s)`}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               )}
@@ -381,10 +483,10 @@ export default function MaaSavitriChatPage() {
 
           {/* Quick Replies */}
           {showQuickReplies && quickReplies.length > 0 && !isLoading && (
-            <div style={{ padding: "8px 24px", display: "flex", flexWrap: "wrap", gap: "8px", background: "#f4f8fb" }}>
-              <div style={{ maxWidth: "780px", width: "100%", margin: "0 auto", display: "flex", flexWrap: "wrap", gap: "8px" }}>
+            <div className="quick-replies">
+              <div className="quick-inner">
                 {quickReplies.map((qr) => (
-                  <button key={qr} className="qbtn" onClick={() => sendMessage(qr)} disabled={isInputDisabled} style={{ background: "#eaf4fc", border: "1px solid #aed6f1", color: "#1a5276", borderRadius: "20px", padding: "7px 15px", fontSize: "13px", cursor: isInputDisabled ? "not-allowed" : "pointer", fontWeight: "500", transition: "all 0.15s", opacity: isInputDisabled ? 0.5 : 1 }}>
+                  <button key={qr} className="qbtn" onClick={() => sendMessage(qr)} disabled={isInputDisabled}>
                     {qr}
                   </button>
                 ))}
@@ -393,8 +495,8 @@ export default function MaaSavitriChatPage() {
           )}
 
           {/* Input Bar */}
-          <div style={{ padding: "12px 24px 14px", background: "#fff", borderTop: "1px solid #dde3ea" }}>
-            <div style={{ maxWidth: "780px", margin: "0 auto", display: "flex", gap: "10px", alignItems: "center" }}>
+          <div className="input-bar">
+            <div className="input-inner">
               <input
                 ref={inputRef}
                 className="ifield"
@@ -408,21 +510,17 @@ export default function MaaSavitriChatPage() {
                   language === "hi" ? "अपना संदेश लिखें..." : "Type your message here..."
                 }
                 disabled={isInputDisabled}
-                style={{ flex: 1, border: "1.5px solid #d5dbdb", borderRadius: "25px", padding: "11px 18px", fontSize: "14px", color: "#2c3e50", background: isInputDisabled ? "#f0f0f0" : "#f7f9fb", transition: "border-color 0.2s, background 0.2s", cursor: isInputDisabled ? "not-allowed" : "text" }}
               />
-              <button
-                className="sbtn"
-                onClick={() => sendMessage()}
-                disabled={!input.trim() || isInputDisabled}
-                style={{ width: "46px", height: "46px", borderRadius: "50%", background: !input.trim() || isInputDisabled ? "#bdc3c7" : "#1a5276", border: "none", cursor: !input.trim() || isInputDisabled ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "background 0.2s" }}
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M2 21l21-9L2 3v7l15 2-15 2v7z"/></svg>
+              <button className="sbtn" onClick={() => sendMessage()} disabled={!input.trim() || isInputDisabled}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="white">
+                  <path d="M2 21l21-9L2 3v7l15 2-15 2v7z" />
+                </svg>
               </button>
             </div>
           </div>
 
           {/* Footer */}
-          <div style={{ textAlign: "center", padding: "6px 0 8px", fontSize: "11px", color: "#aab4be", background: "#fff", borderTop: "1px solid #f0f0f0" }}>
+          <div className="chat-footer">
             Maa Savitri Consultancy Services · Siwan, Bihar · Powered by AI
           </div>
         </div>
