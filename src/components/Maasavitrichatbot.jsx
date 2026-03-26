@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 
-const API_URL = "http://localhost:5000/api/chat";
-const HEALTH_URL = "http://localhost:5000/api/health";
+const API_URL = "https://ask-question-server-rosy.vercel.app/api/chat";
+const HEALTH_URL = "https://ask-question-server-rosy.vercel.app/api/health";
 
 // How many times to retry a failed request (for cold start)
 const MAX_RETRIES = 3;
