@@ -316,9 +316,8 @@ export default function MaaSavitriChatPage() {
         .typing-dots { display: flex; gap: 5px; align-items: center; }
         .retry-text { font-size: 11px; color: #e67e22; }
 
-        /* ── Quick Replies ── */
-        .quick-replies { padding: 6px 14px; display: flex; flex-wrap: wrap; gap: 7px; background: #f4f8fb; }
-        .quick-inner { max-width: 720px; width: 100%; margin: 0 auto; display: flex; flex-wrap: wrap; gap: 7px; }
+        /* ── Quick Replies — inline in message flow ── */
+        .inline-quick { display: flex; flex-wrap: wrap; gap: 7px; padding-left: 37px; padding-top: 2px; }
         .qbtn {
           background: #eaf4fc; border: 1px solid #aed6f1;
           color: #1a5276; border-radius: 20px;
@@ -371,7 +370,7 @@ export default function MaaSavitriChatPage() {
           .chat-title { font-size: 13px; }
           .messages-area { padding: 10px 10px 4px; }
           .msg-bubble { max-width: 82%; font-size: 13px; }
-          .quick-replies { padding: 5px 10px; }
+          .inline-quick { padding-left: 0; }
           .input-bar { padding: 8px 10px 10px; }
           .ncbtn span { display: none; }
         }
@@ -477,22 +476,21 @@ export default function MaaSavitriChatPage() {
                   </div>
                 </div>
               )}
+
+              {/* Quick Replies — inline below last message */}
+              {showQuickReplies && quickReplies.length > 0 && !isLoading && (
+                <div className="msg-in inline-quick">
+                  {quickReplies.map((qr) => (
+                    <button key={qr} className="qbtn" onClick={() => sendMessage(qr)} disabled={isInputDisabled}>
+                      {qr}
+                    </button>
+                  ))}
+                </div>
+              )}
+
               <div ref={messagesEndRef} />
             </div>
           </div>
-
-          {/* Quick Replies */}
-          {showQuickReplies && quickReplies.length > 0 && !isLoading && (
-            <div className="quick-replies">
-              <div className="quick-inner">
-                {quickReplies.map((qr) => (
-                  <button key={qr} className="qbtn" onClick={() => sendMessage(qr)} disabled={isInputDisabled}>
-                    {qr}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
 
           {/* Input Bar */}
           <div className="input-bar">
